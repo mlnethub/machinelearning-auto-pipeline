@@ -1,0 +1,28 @@
+{
+  "parameters": [
+    {
+      "Name": "LabelColumnName",
+      "ValueText": "Label"
+    },
+    {
+      "Name": "FeatureColumnName",
+      "ValueText": "Features"
+    },
+    {
+      "Name": "NumberOfIterations",
+      "ValueText": "100"
+    },
+    {
+      "Name": "TreeDepth",
+      "ValueText": "10"
+    }
+  ],
+  "name": "LdSvmTrainer",
+  "input_column": [
+    "label",
+    "feature"
+  ],
+  "output_column": [
+    "PredictedLabel"
+  ]
+}

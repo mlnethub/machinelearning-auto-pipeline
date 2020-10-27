@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+      <TargetFramework>netstandard2.0</TargetFramework>
+      <IsPackable>true</IsPackable>
+      <SignAssembly>true</SignAssembly>
+      <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MLNet.AutoPipeline\MLNet.AutoPipeline.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MLNet.Expert.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.LightGBM" Version="$(StableMLNetVersion)" />
+  </ItemGroup>
+</Project>

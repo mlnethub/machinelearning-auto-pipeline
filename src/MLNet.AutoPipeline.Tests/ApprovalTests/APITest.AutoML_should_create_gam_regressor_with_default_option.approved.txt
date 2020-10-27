@@ -1,0 +1,32 @@
+{
+  "parameters": [
+    {
+      "Name": "LabelColumnName",
+      "ValueText": "Label"
+    },
+    {
+      "Name": "FeatureColumnName",
+      "ValueText": "Features"
+    },
+    {
+      "Name": "NumberOfIterations",
+      "ValueText": "2236"
+    },
+    {
+      "Name": "MaximumBinCountPerFeature",
+      "ValueText": "100"
+    },
+    {
+      "Name": "LearningRate",
+      "ValueText": "0.010000000000000004"
+    }
+  ],
+  "name": "GamRegressionTrainer",
+  "input_column": [
+    "Label",
+    "Features"
+  ],
+  "output_column": [
+    "Score"
+  ]
+}

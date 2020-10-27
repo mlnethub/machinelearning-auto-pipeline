@@ -1,0 +1,24 @@
+{
+  "parameters": [
+    {
+      "Name": "LabelColumnName",
+      "ValueText": "Label"
+    },
+    {
+      "Name": "FeatureColumnName",
+      "ValueText": "Features"
+    },
+    {
+      "Name": "NumberOfIterations",
+      "ValueText": "100"
+    }
+  ],
+  "name": "LinearSvmTrainer",
+  "input_column": [
+    "label",
+    "feature"
+  ],
+  "output_column": [
+    "PredictedLabel"
+  ]
+}

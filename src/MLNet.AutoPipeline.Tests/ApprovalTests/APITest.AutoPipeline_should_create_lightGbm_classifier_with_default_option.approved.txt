@@ -1,0 +1,27 @@
+{
+  "parameters": [
+    {
+      "Name": "LearningRate",
+      "ValueText": "0.010000000000000004"
+    },
+    {
+      "Name": "NumberOfLeaves",
+      "ValueText": "100"
+    },
+    {
+      "Name": "NumberOfIterations",
+      "ValueText": "100"
+    },
+    {
+      "Name": "MinimumExampleCountPerLeaf",
+      "ValueText": "100"
+    }
+  ],
+  "name": "LightGbmMulticlassTrainer",
+  "input_column": [
+    "feature"
+  ],
+  "output_column": [
+    "PredictedLabel"
+  ]
+}

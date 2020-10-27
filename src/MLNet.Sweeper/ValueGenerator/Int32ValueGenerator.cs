@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Microsoft.ML.Runtime;
 using MLNet.Sweeper;
 
@@ -74,6 +75,30 @@ namespace MLNet.Sweeper
         {
             var valueTyped = value as LongParameterValue;
             return this._options.Min <= valueTyped.Value && valueTyped.Value <= this._options.Max;
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"Parameter Name: {this.Name}");
+            sb.AppendLine($"Parameter Type: int");
+            sb.AppendLine($"Min Value: {this._options.Min}");
+            sb.AppendLine($"Max Value: {this._options.Max}");
+            sb.AppendLine($"Steps: {this._options.Steps}");
+            sb.AppendLine($"Log Base: {this._options.LogBase}");
+
+            return sb.ToString();
+        }
+
+        public IParameterValue CreateFromString(string valueText)
+        {
+            var value = int.Parse(valueText);
+            if (value < this._options.Min || value > this._options.Max)
+            {
+                throw new Exception($"{valueText} is out of range.");
+            }
+
+            return new Int32ParamaterValue(this._options.Name, value, this.ID);
         }
 
         public class Option : NumericValueGeneratorOptionBase

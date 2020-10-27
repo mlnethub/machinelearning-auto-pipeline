@@ -9,25 +9,65 @@ pr:
     - feature/*
 
 jobs:
- 
 - job: Windows
   pool:
-    name: VSEng-MicroBuildVS2017
-    demands: Cmd
+    vmImage: windows-latest
   strategy:
     maxParallel: 4
     matrix:
-      # only run debug in public builds
-      ${{ if ne(variables['SigningType'], 'real') }}:
-        Debug:
-          _configuration: Debug
       Release:
         _configuration: Release
   steps:
-    # Should only run if not real-signing
-    - script: eng\common\CIBuild.cmd -configuration $(_configuration) -prepareMachine -warnAsError 0
-      displayName: Build and Test
-      condition: and(succeeded(), not(and(eq(variables['SigningType'], 'real'), eq(variables['_configuration'], 'Release'))))
+    - script: init.cmd
+      displayName: initialize
+      condition: succeeded()
+      
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'restore'
+        feedsToUse: 'config'
+        nugetConfigPath: 'NuGet.config'
+      condition: succeeded()
+      displayName: "Restore"
+
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'custom'
+        custom: 'msbuild'
+        arguments: '-property:Configuration=$(_configuration)
+                    -property:BUILDNUMBER=release
+                    -bl:./artifacts/log/$(_configuration)/Build.binlog'
+      condition: succeeded()
+      displayName: Build
+    
+    - task: DotNetCoreCLI@2
+      displayName: Test
+      inputs:
+        command: 'test'
+        publishTestResults: true
+        arguments: '--collect "Code coverage"
+                    --no-build
+                    -c $(_configuration)
+                    --settings "CodeCoverage.runsettings"'
+        projects: '**/*.Tests.csproj'
+      condition: succeeded()
+      
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'custom'
+        custom: 'pack'
+        arguments: '-c $(_configuration)
+                    --no-build
+                    -property:SymbolPackageFormat=snupkg
+                    -property:IncludeSymbols=true
+                    -property:BUILDNUMBER=release'
+      displayName: Pack
+      condition: succeeded()
+
+    - script: Build.cmd -BuildDoc
+      displayName: Build Doc site
+      continueOnError: true
+      condition: and(succeeded(), eq(variables['_configuration'], 'Release'))
     
     # Should always run
     - task: PublishBuildArtifacts@1
@@ -36,37 +76,23 @@ jobs:
         ArtifactName: '$(_configuration) log folder'
         publishLocation: Container
       continueOnError: true
-      condition: failed()
-
-    - task: PublishTestResults@2
-      inputs:
-        testRunner: 'xUnit'
-        testResultsFiles: '**/*.xml' 
-        searchFolder: '$(Build.SourcesDirectory)\artifacts\TestResults\$(_configuration)'
-        configuration: '$(_configuration)'
-        publishRunAttachments: true
-      continueOnError: true
-      displayName: Publish test results
-      condition: always()
+      condition: true
 
     - task: PublishBuildArtifacts@1
       inputs:
-        PathtoPublish: '$(Build.SourcesDirectory)\artifacts\bin'
-        ArtifactName: '$(_configuration) bin folder'
-        publishLocation: Container
-      displayName: Publish bin directory
-      continueOnError: true
-      condition: failed()
-
-    - task: PublishBuildArtifacts@1
-      inputs:
-        PathtoPublish: '$(Build.SourcesDirectory)\artifacts\packages\$(_configuration)'
+        PathtoPublish: '$(Build.SourcesDirectory)\artifacts\Packages\$(_configuration)'
         ArtifactName: '$(_configuration) packages folder'
         publishLocation: Container
       displayName: Publish packages folder
       continueOnError: true
       condition: eq(variables['_configuration'], 'Release')
 
-    - task: ms-vseng.MicroBuildTasks.521a94ea-9e68-468a-8167-6dcf361ea776.MicroBuildCleanup@1
-      displayName: 'Execute cleanup tasks'
-      condition: and(succeeded(), eq(variables['SigningType'], 'real'), eq(variables['_configuration'], 'Release'))
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)\docs'
+        ArtifactName: 'doc site'
+        publishLocation: Container
+      displayName: Publish doc folder
+      continueOnError: true
+      condition: and(succeeded(), eq(variables['_configuration'], 'Release'))
+

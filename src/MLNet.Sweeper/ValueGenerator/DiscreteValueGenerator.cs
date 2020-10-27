@@ -2,18 +2,20 @@
 // Copyright (c) BigMiao. All rights reserved.
 // </copyright>
 
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace MLNet.Sweeper
 {
     /// <summary>
     /// The discrete parameter sweep.
     /// </summary>
-    public class DiscreteValueGenerator : IDiscreteValueGenerator
+    public class DiscreteValueGenerator<TValue> : IDiscreteValueGenerator
     {
-        private readonly Option _options;
+        private readonly Option<TValue> _options;
 
         public string Name
         {
@@ -28,28 +30,32 @@ namespace MLNet.Sweeper
             }
         }
 
-        public DiscreteValueGenerator(Option options)
+        public DiscreteValueGenerator(Option<TValue> options)
         {
             this._options = options;
             this.ID = Guid.NewGuid().ToString("N");
         }
 
-        // REVIEW: Is float accurate enough?
         public IParameterValue CreateFromNormalized(double normalizedValue)
         {
             var rawValue = this._options.Values[(int)(this._options.Values.Length * normalizedValue)];
-            var value = new DiscreteParameterValue(this._options.Name, rawValue, this.OneHotEncodeValue(rawValue), this.ID);
+            var value = Utils.CreateObjectParameterValue(this._options.Name, rawValue, this.OneHotEncodeValue(rawValue), this.ID);
             return value;
         }
 
         public double[] OneHotEncodeValue(IParameterValue value)
         {
-            return this.OneHotEncodeValue(value.RawValue);
+            if (!(value is ObjectParameterValue<TValue>))
+            {
+                throw new Exception($"can't find value {value}");
+            }
+
+            return this.OneHotEncodeValue((value as ObjectParameterValue<TValue>).Value);
         }
 
-        private double[] OneHotEncodeValue(object rawValue)
+        private double[] OneHotEncodeValue(TValue rawValue)
         {
-            var index = Array.FindIndex(this._options.Values, (object val) => val == rawValue);
+            var index = Array.FindIndex(this._options.Values, (TValue val) => val.Equals(rawValue));
             if (index < 0)
             {
                 throw new Exception($"can't find value {rawValue}");
@@ -62,15 +68,43 @@ namespace MLNet.Sweeper
             }
         }
 
-        public IParameterValue this[int i] => new DiscreteParameterValue(this._options.Name, this._options.Values[i], this.OneHotEncodeValue(this._options.Values[i]));
+        public TValue[] Values
+        {
+            get => this._options.Values;
+        }
+
+        public IParameterValue this[int i] => Utils.CreateObjectParameterValue(this._options.Name, this._options.Values[i], this.OneHotEncodeValue(this._options.Values[i]), this.ID);
 
         public int Count => this._options.Values.Length;
 
+        [JsonIgnore]
         public string ID { get; private set; }
 
-        public class Option : ValueGeneratorOptionBase
+        public override string ToString()
         {
-            public object[] Values = null;
+            var sb = new StringBuilder();
+            sb.AppendLine($"Parameter Name: {this.Name}");
+            sb.AppendLine($"Parameter Type: Discrete");
+            sb.AppendLine($"Parameter Value: {string.Join(",", this._options.Values.Select(x => x.ToString()))}");
+
+            return sb.ToString();
+        }
+
+        public IParameterValue CreateFromString(string valueText)
+        {
+            var value = this.Values.Where(val => valueText == val.ToString()).FirstOrDefault();
+
+            if (value == null)
+            {
+                throw new Exception($"can't find {valueText}");
+            }
+
+            return Utils.CreateObjectParameterValue(this._options.Name, value, this.OneHotEncodeValue(value), this.ID);
+        }
+
+        public class Option<TValue> : ValueGeneratorOptionBase
+        {
+            public TValue[] Values = null;
         }
     }
 }

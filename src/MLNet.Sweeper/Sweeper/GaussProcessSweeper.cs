@@ -14,32 +14,18 @@ namespace MLNet.Sweeper
     {
         private ISweeper _randomSweeper;
         private GaussProcessRegressor _regressor;
-        private HashSet<ParameterSet> _generated;
+        private HashSet<IDictionary<string, string>> _generated;
         private Option _option;
         private IList<IRunResult> _runHistory;
         private Random _rand = new Random();
         private IEnumerable<IValueGenerator> _valueGenerators;
 
-        public ParameterSet Current { get; private set; }
-
-        public IEnumerable<IValueGenerator> SweepableParamaters
-        {
-            get
-            {
-                return this._valueGenerators;
-            }
-
-            set
-            {
-                this._valueGenerators = value;
-                this._randomSweeper.SweepableParamaters = value;
-            }
-        }
+        public Parameters Current { get; private set; }
 
         public GaussProcessSweeper(Option option)
         {
             this._option = option;
-            this._generated = new HashSet<ParameterSet>();
+            this._generated = new HashSet<IDictionary<string, string>>();
             this._runHistory = new List<IRunResult>();
             var randomSweeperOption = new UniformRandomSweeper.Option()
             {
@@ -63,8 +49,9 @@ namespace MLNet.Sweeper
             this._runHistory.Add(input);
         }
 
-        public IEnumerable<ParameterSet> ProposeSweeps(int maxSweeps, IEnumerable<IRunResult> previousRuns = null)
+        public IEnumerable<IDictionary<string, string>> ProposeSweeps(ISweepable sweepable, int maxSweeps = 100, IEnumerable<IRunResult> previousRuns = null)
         {
+            this._valueGenerators = sweepable.SweepableValueGenerators;
             if (previousRuns != null)
             {
                 foreach ( var history in previousRuns)
@@ -77,9 +64,8 @@ namespace MLNet.Sweeper
             {
                 if (this._runHistory.Count < this._option.InitialPopulation)
                 {
-                    var randomSweepResult = this._randomSweeper.ProposeSweeps(1, this._runHistory).First();
+                    var randomSweepResult = this._randomSweeper.ProposeSweeps(sweepable, 1, this._runHistory).First();
                     this._generated.Add(randomSweepResult);
-                    this.Current = randomSweepResult;
                     yield return randomSweepResult;
                 }
                 else
@@ -96,21 +82,26 @@ namespace MLNet.Sweeper
                     }
 
                     // Get K*N one-step sample from kBestParents.
-                    var candidates = new List<ParameterSet>();
+                    var candidates = new List<IDictionary<string, string>>();
                     foreach ( var parent in kBestParents)
                     {
-                        var _candidates = this.GetOneMutationNeighbourhood(parent.ParameterSet);
+                        var parameter = new Parameters(parent.ParameterSet.Select(kv =>
+                        {
+                            var generator = this._valueGenerators.Where(g => g.Name == kv.Key).FirstOrDefault();
+                            return generator.CreateFromString(kv.Value);
+                        }));
+                        var _candidates = this.GetOneMutationNeighbourhood(parameter);
                         candidates.AddRange(_candidates);
                     }
 
                     // add some random samples
-                    var random_sample = this._randomSweeper.ProposeSweeps(20, this._runHistory).ToList();
+                    var random_sample = this._randomSweeper.ProposeSweeps(sweepable, 20, this._runHistory).ToList();
                     candidates.AddRange(random_sample);
 
                     // prepare train data
-                    var X_train = this.CreateNDarrayFromParamaterSet(this._runHistory.Select(history => history.ParameterSet));
+                    var X_train = this.CreateNDarrayFromParamaters(this._runHistory.Select(history => history.ParameterSet));
                     var y_train = np.array(this._runHistory.Select(x => x.IsMetricMaximizing ? (double)x.MetricValue : -(double)x.MetricValue).ToArray()).reshape(-1, 1);
-                    var X_sample = this.CreateNDarrayFromParamaterSet(candidates);
+                    var X_sample = this.CreateNDarrayFromParamaters(candidates);
 
                     // fit
                     (var predict_y, var std, var cov) = this._regressor.Fit(X_train, y_train).Transform(X_sample);
@@ -124,31 +115,21 @@ namespace MLNet.Sweeper
                         bestCandidate = this._rand.Next(0, ei.len);
                     }
 
-                    Console.WriteLine($"Best candidate: {bestCandidate}");
-                    Console.WriteLine($"Best candidate ei: {(double)np.max(ei)}");
                     this._generated.Add(candidates[bestCandidate]);
-                    this.Current = candidates[bestCandidate];
                     yield return candidates[bestCandidate];
                 }
             }
         }
 
-        private NDarray CreateNDarrayFromParamaterSet(IEnumerable<ParameterSet> parameterSets)
+        private NDarray CreateNDarrayFromParamaters(IEnumerable<IDictionary<string, string>> parameters)
         {
             NDarray res = null;
-            foreach ( var paramterSet in parameterSets)
+            foreach ( var paramterSet in parameters)
             {
                 var doubleArray = new List<double>();
                 foreach (var paramater in paramterSet)
                 {
-                    if (paramater is IDiscreteParameterValue)
-                    {
-                        doubleArray.AddRange((paramater as IDiscreteParameterValue).OneHotEncode);
-                    }
-                    else
-                    {
-                        doubleArray.Add(double.Parse(paramater.ValueText));
-                    }
+                    doubleArray.Add(double.Parse(paramater.Value));
                 }
 
                 if (res == null)
@@ -174,17 +155,31 @@ namespace MLNet.Sweeper
             return ei;
         }
 
-        private ParameterSet[] GetOneMutationNeighbourhood(ParameterSet parent)
+        public object Clone()
         {
-            var candicates = new List<ParameterSet>();
-            foreach (var valueGenerator in this.SweepableParamaters)
+            return new GaussProcessSweeper(this._option);
+        }
+
+        private IDictionary<string, string>[] GetOneMutationNeighbourhood(Parameters parent)
+        {
+            var candicates = new List<Parameters>();
+            foreach (var valueGenerator in this._valueGenerators)
             {
                 var _candidates = parent.Clone();
                 var value = _candidates[valueGenerator.ID];
                 if (valueGenerator is INumericValueGenerator)
                 {
                     var norm = (valueGenerator as INumericValueGenerator).NormalizeValue(value);
-                    var next = Utils.NormCDF(1e-2 * Utils.Normal() + norm);
+                    var next = 1e-2 * Utils.Normal() + norm;
+                    while (true)
+                    {
+                        if (next > 0 || next < 1)
+                        {
+                            break;
+                        }
+
+                        next = 1e-2 * Utils.Normal() + norm;
+                    }
 
                     _candidates[valueGenerator.ID] = valueGenerator.CreateFromNormalized(next);
                 }
@@ -196,7 +191,7 @@ namespace MLNet.Sweeper
                 candicates.Add(_candidates);
             }
 
-            return candicates.ToArray();
+            return candicates.Select(x => x.ParameterValues).ToArray();
         }
 
         public class Option : SweeperOptionBase

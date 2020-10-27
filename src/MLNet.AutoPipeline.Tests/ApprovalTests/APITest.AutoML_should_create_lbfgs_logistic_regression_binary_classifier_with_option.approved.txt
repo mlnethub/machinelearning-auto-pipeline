@@ -1,0 +1,44 @@
+{
+  "parameters": [
+    {
+      "Name": "LabelColumnName",
+      "ValueText": "Label"
+    },
+    {
+      "Name": "FeatureColumnName",
+      "ValueText": "Features"
+    },
+    {
+      "Name": "L1Regularization",
+      "ValueText": "0.31622776"
+    },
+    {
+      "Name": "L2Regularization",
+      "ValueText": "0.031622775"
+    },
+    {
+      "Name": "MaximumNumberOfIterations",
+      "ValueText": "16"
+    },
+    {
+      "Name": "OptimizationTolerance",
+      "ValueText": "3.1622776E-07"
+    },
+    {
+      "Name": "HistorySize",
+      "ValueText": "52"
+    },
+    {
+      "Name": "EnforceNonNegativity",
+      "ValueText": "False"
+    }
+  ],
+  "name": "LbfgsLogisticRegressionBinaryTrainer",
+  "input_column": [
+    "label",
+    "feature"
+  ],
+  "output_column": [
+    "PredictedLabel"
+  ]
+}

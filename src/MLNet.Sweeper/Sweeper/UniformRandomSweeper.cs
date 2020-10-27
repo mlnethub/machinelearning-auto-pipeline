@@ -24,9 +24,14 @@ namespace MLNet.Sweeper
             this._rand = new Random();
         }
 
-        protected override ParameterSet CreateParamSet()
+        public override object Clone()
         {
-            return new ParameterSet(this.SweepableParamaters.Select(sweepParameter => sweepParameter.CreateFromNormalized(this._rand.NextDouble())));
+            return new UniformRandomSweeper(this._option);
+        }
+
+        protected override Parameters CreateParamSet(ISweepable sweepable)
+        {
+            return new Parameters(sweepable.SweepableValueGenerators.Select(sweepParameter => sweepParameter.CreateFromNormalized(this._rand.NextDouble())));
         }
 
         public class Option : SweeperOptionBase

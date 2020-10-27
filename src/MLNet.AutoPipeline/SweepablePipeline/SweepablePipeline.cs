@@ -5,6 +5,7 @@
 using Microsoft.ML;
 using Microsoft.ML.Data;
 using MLNet.Sweeper;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,104 +13,84 @@ using System.Text;
 
 namespace MLNet.AutoPipeline
 {
-    public class SweepablePipeline : ISweepablePipeline
+    public class SweepablePipeline : ISweepable<SingleEstimatorSweepablePipeline>
     {
-        public IList<IValueGenerator> ValueGenerators { get; private set; }
+        public IEnumerable<IValueGenerator> SweepableValueGenerators { get => this.EstimatorGenerators; }
 
-        public IList<ISweepablePipelineNode> SingleNodeBuilders { get; private set; }
-
-        public ISweeper Sweeper { get; private set; }
+        internal IList<DiscreteValueGenerator<SweepableEstimatorBase>> EstimatorGenerators { get; private set; }
 
         public SweepablePipeline()
         {
-            this.ValueGenerators = new List<IValueGenerator>();
-            this.SingleNodeBuilders = new List<ISweepablePipelineNode>();
-            this.Sweeper = new UniformRandomSweeper(new UniformRandomSweeper.Option());
+            this.EstimatorGenerators = new List<DiscreteValueGenerator<SweepableEstimatorBase>>();
         }
 
-        private SweepablePipeline(IList<IValueGenerator> valueGenerators, IList<ISweepablePipelineNode> singleNodeBuilders, ISweeper sweeper)
+        public SweepablePipeline Append(SweepableEstimatorBase estimator)
         {
-            this.ValueGenerators = valueGenerators;
-            this.SingleNodeBuilders = singleNodeBuilders;
-            this.Sweeper = sweeper;
-        }
-
-        public ISweepablePipeline Append(ISweepablePipelineNode builder)
-        {
-            this.SingleNodeBuilders.Add(builder);
-            if (builder.ValueGenerators != null)
+            var i = this.EstimatorGenerators.Count();
+            var option = new DiscreteValueGenerator<SweepableEstimatorBase>.Option<SweepableEstimatorBase>()
             {
-                this.ValueGenerators = this.ValueGenerators.Concat(builder.ValueGenerators.ToList()).ToList();
-            }
+                Values = new SweepableEstimatorBase[] { estimator },
+                Name = $"{nameof(SweepablePipeline)}_{i}",
+            };
+
+            this.EstimatorGenerators.Add(new DiscreteValueGenerator<SweepableEstimatorBase>(option));
 
             return this;
         }
 
-        public ISweepablePipeline Append<TNewTrans>(IEstimator<TNewTrans> estimator, TransformerScope scope = TransformerScope.Everything)
-            where TNewTrans : ITransformer
+        public SweepablePipeline Append(params SweepableEstimatorBase[] estimators)
         {
-            var estimatorWrapper = new UnsweepableNode<TNewTrans>(estimator, scope);
+            if (estimators.Length == 0)
+            {
+                return this;
+            }
+
+            var i = this.EstimatorGenerators.Count();
+            var option = new DiscreteValueGenerator<SweepableEstimatorBase>.Option<SweepableEstimatorBase>()
+            {
+                Values = estimators,
+                Name = $"{nameof(SweepablePipeline)}_{i}",
+            };
+
+            this.EstimatorGenerators.Add(new DiscreteValueGenerator<SweepableEstimatorBase>(option));
+
+            return this;
+        }
+
+        public SweepablePipeline Append<TNewTrans>(TNewTrans estimator, TransformerScope scope = TransformerScope.Everything)
+            where TNewTrans : IEstimator<ITransformer>
+        {
+            var estimatorWrapper = Util.CreateSweepableEstimator(estimator, scope);
             this.Append(estimatorWrapper);
 
             return this;
         }
 
-        public string Summary()
-        {
-            return $"SweepablePipeline({string.Join("=>", this.SingleNodeBuilders.Select(builder => builder.EstimatorName))})";
-        }
-
         public override string ToString()
         {
-            return this.Summary();
+            return $"SweepablePipeline({string.Join("=>", this.EstimatorGenerators.Select(builder => $"[{string.Join("|", builder.Values.Select(node => node.EstimatorName))}]"))})";
         }
 
-        public void UseSweeper(ISweeper sweeper)
+        public SingleEstimatorSweepablePipeline BuildFromParameters(IDictionary<string, string> parameters)
         {
-            this.Sweeper = sweeper;
-            this.Sweeper.SweepableParamaters = this.ValueGenerators;
-        }
+            var estimators = new List<SweepableEstimatorBase>();
 
-        public IEnumerable<EstimatorChain<ITransformer>> Sweeping(int maximum)
-        {
-            if (this.ValueGenerators.Count == 0)
+            foreach (var generator in this.EstimatorGenerators)
             {
-                var pipeline = new EstimatorChain<ITransformer>();
-                for (int i = 0; i < this.SingleNodeBuilders.Count; i++)
+                // TODO
+                // Error Handling
+                if (!parameters.ContainsKey(generator.ID))
                 {
-                    pipeline = pipeline.Append(this.SingleNodeBuilders[i].BuildEstimator(), this.SingleNodeBuilders[i].Scope);
+                    throw new Exception("can't build SingleSweepablePipeline from SweepablePipeline");
                 }
 
-                yield return pipeline;
+                var valueText = parameters[generator.ID];
+                var estimator = generator.CreateFromString(valueText).RawValue;
+
+                estimators.Add(estimator as SweepableEstimatorBase);
             }
-            else
-            {
-                // index of autoEstimator
-                foreach (var parameters in this.Sweeper.ProposeSweeps(maximum))
-                {
-                    var pipeline = new EstimatorChain<ITransformer>();
-                    for (int i = 0; i < this.SingleNodeBuilders.Count; i++)
-                    {
-                        pipeline = pipeline.Append(this.SingleNodeBuilders[i].BuildEstimator(parameters), this.SingleNodeBuilders[i].Scope);
-                    }
 
-                    yield return pipeline;
-                }
-            }
-        }
-
-        public ISweepablePipeline Concat(ISweepablePipeline chain)
-        {
-            return new SweepablePipeline(this.ValueGenerators.Concat(chain.ValueGenerators).ToList(), this.SingleNodeBuilders.Concat(chain.SingleNodeBuilders).ToList(), this.Sweeper);
-        }
-
-        public ISweepablePipeline Append<TNewTrains, TOption>(Func<TOption, IEstimator<TNewTrains>> estimatorBuilder, OptionBuilder<TOption> optionBuilder, TransformerScope scope = TransformerScope.Everything)
-            where TNewTrains : ITransformer
-            where TOption : class
-        {
-            var autoEstimator = new SweepableNode<TNewTrains, TOption>(estimatorBuilder, optionBuilder, scope);
-            this.Append(autoEstimator);
-            return this;
+            return new SingleEstimatorSweepablePipeline(estimators);
         }
     }
 }

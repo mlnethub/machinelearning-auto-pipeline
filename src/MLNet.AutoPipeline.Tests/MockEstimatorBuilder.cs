@@ -15,27 +15,15 @@ using static Microsoft.ML.Trainers.MatrixFactorizationTrainer;
 namespace MLNet.AutoPipeline.Test
 {
 
-    public class MockEstimatorBuilder : ISweepablePipelineNode
+    public class MockEstimatorBuilder : SweepableEstimatorBase
     {
         public MockEstimatorBuilder(string name)
+            :base(name, null, null, null, TransformerScope.Everything)
         {
             this.EstimatorName = name;
         }
 
-        public TransformerScope Scope => TransformerScope.Everything;
-
-        public string EstimatorName { get; private set; }
-
-        public IValueGenerator[] ValueGenerators => new List<IValueGenerator>().ToArray();
-
-        public SweepablePipelineNodeType NodeType => SweepablePipelineNodeType.Sweepable;
-
-        public IEstimator<ITransformer> BuildEstimator(ParameterSet parameters)
-        {
-            return null;
-        }
-
-        public string Summary()
+        public override IEstimator<ITransformer> BuildFromParameters(IDictionary<string, string> parameters)
         {
             throw new System.NotImplementedException();
         }
